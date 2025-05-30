@@ -92,8 +92,6 @@ class Session
         if (!isset($_SESSION['FINGERPRINT'])) {
             $_SESSION['FINGERPRINT'] = $fingerprint;
         } elseif ($_SESSION['FINGERPRINT'] !== $fingerprint) {
-            // Кто-то пытается похитить сессию — сразу выходим
-            AuditService::log(AuthService::check() ? AuthService::user()['id'] : null, 'session_hijack', 'session', null, ['session_id' => session_id()]);
             self::logout();
             session_start(); // создаём новую сессию
         }
