@@ -376,15 +376,21 @@ class QueueService
     /**
      * Обработчик для метрик
      */
+    /**
+     * Обработчик для метрик
+     * ВАЖНО: Записываем напрямую в БД без использования MetricsService,
+     * чтобы избежать циклических вызовов
+     */
     public static function processMetrics(array $payload): bool
     {
         try {
+            // Записываем метрику напрямую в БД
             Database::query(
                 "INSERT INTO metrics (metric_type, data, value, created_at) 
                  VALUES (?, ?, ?, ?)",
                 [
                     $payload['type'],
-                    json_encode($payload['data']),
+                    json_encode($payload['data'], JSON_UNESCAPED_UNICODE),
                     $payload['value'],
                     $payload['created_at']
                 ]
@@ -392,7 +398,8 @@ class QueueService
             
             return true;
         } catch (\Exception $e) {
-            Logger::error('Failed to save metric', ['error' => $e->getMessage()]);
+            // Используем error_log вместо Logger для избежания рекурсии
+            error_log('Failed to save metric from queue: ' . $e->getMessage());
             return false;
         }
     }

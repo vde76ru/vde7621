@@ -3,6 +3,8 @@ namespace App\Services;
 
 use App\Core\Database;
 use App\Core\Cache;
+use App\Core\Logger;
+use PDO;
 
 /**
  * Сервис для работы с динамическими данными товаров
@@ -22,51 +24,96 @@ class DynamicProductDataService
      */
     public function getProductsDynamicData(array $productIds, int $cityId, ?int $userId = null): array
     {
-        // Валидация входных данных
-        $productIds = array_filter($productIds, 'is_numeric');
-        $productIds = array_unique($productIds);
-        
-        if (empty($productIds)) {
-            return [];
+        try {
+            // Валидация входных данных
+            $productIds = array_filter($productIds, 'is_numeric');
+            $productIds = array_unique($productIds);
+            
+            if (empty($productIds)) {
+                return [];
+            }
+            
+            if (count($productIds) > self::MAX_BATCH_SIZE) {
+                throw new \InvalidArgumentException('Слишком много товаров в запросе');
+            }
+    
+            // Проверяем, что город существует
+            $pdo = Database::getConnection();
+            $cityCheckSql = "SELECT city_id FROM cities WHERE city_id = ? LIMIT 1";
+            $stmt = $pdo->prepare($cityCheckSql);
+            $stmt->execute([$cityId]);
+            
+            if (!$stmt->fetch()) {
+                throw new \InvalidArgumentException("Город с ID {$cityId} не найден");
+            }
+    
+            // Проверяем кеш
+            $cacheKey = $this->getCacheKey($productIds, $cityId, $userId);
+            $cached = Cache::get($cacheKey);
+            if ($cached !== null) {
+                return $cached;
+            }
+            
+            $result = [];
+            
+            // 1. Получаем цены (с защитой от ошибок)
+            try {
+                $prices = $this->getPrices($pdo, $productIds, $userId);
+            } catch (\Exception $e) {
+                Logger::warning('Failed to get prices', ['error' => $e->getMessage()]);
+                $prices = [];
+            }
+            
+            // 2. Получаем остатки (с защитой от ошибок)
+            try {
+                $stocks = $this->getStocksForCity($pdo, $productIds, $cityId);
+            } catch (\Exception $e) {
+                Logger::warning('Failed to get stocks', ['error' => $e->getMessage()]);
+                $stocks = [];
+            }
+            
+            // 3. Получаем даты доставки (с защитой от ошибок)
+            try {
+                $deliveryDates = $this->getDeliveryDates($pdo, $productIds, $cityId, $stocks);
+            } catch (\Exception $e) {
+                Logger::warning('Failed to get delivery dates', ['error' => $e->getMessage()]);
+                $deliveryDates = [];
+            }
+            
+            // 4. Собираем результат с дефолтными значениями
+            foreach ($productIds as $productId) {
+                $result[$productId] = [
+                    'price' => $prices[$productId] ?? [
+                        'base' => null,
+                        'final' => null,
+                        'has_special' => false
+                    ],
+                    'stock' => $stocks[$productId] ?? [
+                        'quantity' => 0, 
+                        'warehouses' => []
+                    ],
+                    'delivery' => $deliveryDates[$productId] ?? [
+                        'date' => null,
+                        'text' => 'Уточняйте'
+                    ],
+                    'available' => ($stocks[$productId]['quantity'] ?? 0) > 0
+                ];
+            }
+            
+            // Сохраняем в кеш
+            Cache::set($cacheKey, $result, self::CACHE_TTL);
+            
+            return $result;
+            
+        } catch (\Exception $e) {
+            Logger::error('DynamicProductDataService error', [
+                'error' => $e->getMessage(),
+                'product_ids' => $productIds,
+                'city_id' => $cityId,
+                'user_id' => $userId
+            ]);
+            throw $e;
         }
-        
-        if (count($productIds) > self::MAX_BATCH_SIZE) {
-            throw new \InvalidArgumentException('Слишком много товаров в запросе');
-        }
-        
-        // Проверяем кеш
-        $cacheKey = $this->getCacheKey($productIds, $cityId, $userId);
-        $cached = Cache::get($cacheKey);
-        if ($cached !== null) {
-            return $cached;
-        }
-        
-        $pdo = Database::getConnection();
-        $result = [];
-        
-        // 1. Получаем цены (базовые или клиентские)
-        $prices = $this->getPrices($pdo, $productIds, $userId);
-        
-        // 2. Получаем остатки для города
-        $stocks = $this->getStocksForCity($pdo, $productIds, $cityId);
-        
-        // 3. Получаем даты доставки
-        $deliveryDates = $this->getDeliveryDates($pdo, $productIds, $cityId, $stocks);
-        
-        // 4. Собираем результат
-        foreach ($productIds as $productId) {
-            $result[$productId] = [
-                'price' => $prices[$productId] ?? null,
-                'stock' => $stocks[$productId] ?? ['quantity' => 0, 'warehouses' => []],
-                'delivery' => $deliveryDates[$productId] ?? null,
-                'available' => ($stocks[$productId]['quantity'] ?? 0) > 0
-            ];
-        }
-        
-        // Сохраняем в кеш
-        Cache::set($cacheKey, $result, self::CACHE_TTL);
-        
-        return $result;
     }
     
     /**

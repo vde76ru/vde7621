@@ -45,9 +45,11 @@ class SpecificationController
             
                 // Ищем цену в таблице prices
                 $price = 0;
-                $pdo = Database::getConnection();
-                $stmt = $pdo->prepare("SELECT price FROM prices WHERE product_id = ? AND is_base = 1 ORDER BY valid_from DESC LIMIT 1");
-                $stmt->execute([$productId]);
+                $price = 0;
+                $stmt = Database::query(
+                    "SELECT price FROM prices WHERE product_id = ? AND is_base = 1 ORDER BY valid_from DESC LIMIT 1",
+                    [$productId]
+                );
                 $dbPrice = $stmt->fetchColumn();
                 if (is_numeric($dbPrice)) $price = round($dbPrice, 2);
             

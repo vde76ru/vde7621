@@ -1,5 +1,4 @@
 <?php
-// src/Services/MetricsService.php
 namespace App\Services;
 
 use App\Core\Database;
@@ -9,9 +8,8 @@ use App\Core\Logger;
 /**
  * Сервис для сбора и анализа метрик приложения
  * 
- * Представьте, что это как приборная панель в автомобиле - 
- * мы видим скорость, расход топлива, температуру двигателя.
- * Так и здесь - мы следим за "здоровьем" нашего приложения!
+ * ВАЖНО: Этот сервис НЕ использует QueueService напрямую,
+ * чтобы избежать циклических зависимостей
  */
 class MetricsService
 {
@@ -26,6 +24,9 @@ class MetricsService
     const METRIC_SEARCH = 'search';
     const METRIC_LOGIN = 'login';
     
+    // Флаг для предотвращения рекурсии
+    private static bool $isRecording = false;
+    
     /**
      * Записать метрику
      * 
@@ -35,6 +36,13 @@ class MetricsService
      */
     public static function record(string $type, array $data = [], float $value = 1.0): void
     {
+        // Предотвращаем рекурсию
+        if (self::$isRecording) {
+            return;
+        }
+        
+        self::$isRecording = true;
+        
         try {
             // Добавляем общие данные
             $data = array_merge($data, [
@@ -48,28 +56,44 @@ class MetricsService
                 'request_uri' => $_SERVER['REQUEST_URI'] ?? null
             ]);
             
-            // Сохраняем в БД (асинхронно через очередь в идеале)
-            self::saveMetric($type, $data, $value);
+            // Сохраняем напрямую в БД без использования QueueService
+            self::saveMetricDirectly($type, $data, $value);
             
             // Обновляем счетчики в кеше для быстрого доступа
             self::updateCounters($type, $value);
             
         } catch (\Exception $e) {
             // Не даем ошибкам метрик ломать основное приложение
-            Logger::error('Metrics recording failed', [
-                'type' => $type,
-                'error' => $e->getMessage()
-            ]);
+            // Используем error_log вместо Logger чтобы избежать рекурсии
+            error_log('Metrics recording failed: ' . $e->getMessage());
+        } finally {
+            self::$isRecording = false;
+        }
+    }
+    
+    /**
+     * Сохранить метрику напрямую в БД
+     */
+    private static function saveMetricDirectly(string $type, array $data, float $value): void
+    {
+        try {
+            Database::query(
+                "INSERT INTO metrics (metric_type, data, value, created_at) 
+                 VALUES (?, ?, ?, NOW())",
+                [
+                    $type,
+                    json_encode($data, JSON_UNESCAPED_UNICODE),
+                    $value
+                ]
+            );
+        } catch (\Exception $e) {
+            // Игнорируем ошибки записи метрик
+            error_log('Failed to save metric: ' . $e->getMessage());
         }
     }
     
     /**
      * Замерить время выполнения операции
-     * 
-     * Использование:
-     * $timer = MetricsService::startTimer();
-     * // ... ваш код ...
-     * MetricsService::endTimer($timer, 'db_query', ['query' => 'SELECT ...']);
      */
     public static function startTimer(): float
     {
@@ -88,9 +112,6 @@ class MetricsService
     
     /**
      * Получить статистику за период
-     * 
-     * @param string $period Период: 'hour', 'day', 'week', 'month'
-     * @return array
      */
     public static function getStats(string $period = 'day'): array
     {
@@ -126,7 +147,7 @@ class MetricsService
             return $stats;
             
         } catch (\Exception $e) {
-            Logger::error('Failed to get metrics stats', ['error' => $e->getMessage()]);
+            error_log('Failed to get metrics stats: ' . $e->getMessage());
             return [];
         }
     }
@@ -184,34 +205,18 @@ class MetricsService
             
             $deleted = $stmt->rowCount();
             
-            Logger::info('Metrics cleanup completed', [
-                'deleted' => $deleted,
-                'cutoff_date' => $cutoffDate
-            ]);
+            // Используем простое логирование без зависимостей
+            error_log("Metrics cleanup completed: deleted {$deleted} records");
             
             return $deleted;
             
         } catch (\Exception $e) {
-            Logger::error('Metrics cleanup failed', ['error' => $e->getMessage()]);
+            error_log('Metrics cleanup failed: ' . $e->getMessage());
             return 0;
         }
     }
     
     // === Приватные методы ===
-    
-    /**
-     * Сохранить метрику в БД
-     */
-    private static function saveMetric(string $type, array $data, float $value): void
-    {
-        // В идеале это должно идти через очередь
-        QueueService::push('metrics', [
-            'type' => $type,
-            'data' => $data,
-            'value' => $value,
-            'created_at' => date('Y-m-d H:i:s')
-        ], 1); // Низкий приоритет
-    }
     
     /**
      * Обновить счетчики в кеше

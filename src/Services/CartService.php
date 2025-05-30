@@ -138,7 +138,7 @@ class CartService
         
         $productIds = array_keys($cart);
         
-        // Один запрос для всех товаров
+        // Используем Database::query() вместо прямого PDO
         $placeholders = implode(',', array_fill(0, count($productIds), '?'));
         $stmt = Database::query(
             "SELECT p.*, pr.price as base_price, b.name as brand_name, s.name as series_name

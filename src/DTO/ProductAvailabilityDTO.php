@@ -68,15 +68,20 @@ class ProductAvailabilityDTO
      */
     public static function fromDynamicData(int $productId, array $dynamicData): self
     {
+        // Защищаемся от неполных данных
+        $stockData = $dynamicData['stock'] ?? [];
+        $deliveryData = $dynamicData['delivery'] ?? [];
+        $priceData = $dynamicData['price'] ?? [];
+        
         return new self([
             'product_id' => $productId,
-            'quantity' => $dynamicData['stock']['quantity'] ?? 0,
-            'delivery_date' => $dynamicData['delivery']['date'] ?? null,
-            'delivery_text' => $dynamicData['delivery']['text'] ?? 'Уточняйте',
-            'price' => $dynamicData['price']['final'] ?? null,
-            'base_price' => $dynamicData['price']['base'] ?? null,
-            'has_special_price' => $dynamicData['price']['has_special'] ?? false,
-            'warehouses' => $dynamicData['stock']['warehouses'] ?? []
+            'quantity' => (int)($stockData['quantity'] ?? 0),
+            'delivery_date' => $deliveryData['date'] ?? null,
+            'delivery_text' => $deliveryData['text'] ?? 'Уточняйте',
+            'price' => $priceData['final'] ?? null,
+            'base_price' => $priceData['base'] ?? null,
+            'has_special_price' => (bool)($priceData['has_special'] ?? false),
+            'warehouses' => $stockData['warehouses'] ?? []
         ]);
     }
 }

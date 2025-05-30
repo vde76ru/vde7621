@@ -17,14 +17,24 @@ class ApiController extends BaseController
     public function availabilityAction(): void
     {
         try {
-            // Используем только $_GET для GET-запросов
+            // Логируем входные данные
+            Logger::info('API Availability called', [
+                'get_params' => $_GET,
+                'city_id' => $_GET['city_id'] ?? 'missing',
+                'product_ids' => $_GET['product_ids'] ?? 'missing'
+            ]);
+    
             $validated = $this->validate($_GET, [
                 'city_id' => 'required|integer|min:1',
                 'product_ids' => 'required|string|max:10000'
             ]);
             
+            Logger::info('Validation passed', ['validated' => $validated]);
+            
             $productIds = array_map('intval', explode(',', $validated['product_ids']));
             $productIds = array_filter($productIds, fn($id) => $id > 0);
+            
+            Logger::info('Product IDs processed', ['product_ids' => $productIds]);
             
             if (empty($productIds)) {
                 $this->error('Нет валидных product_ids', 400);
@@ -36,21 +46,24 @@ class ApiController extends BaseController
             $dynamicService = new DynamicProductDataService();
             $userId = AuthService::check() ? AuthService::user()['id'] : null;
             
+            Logger::info('Before getting dynamic data', [
+                'product_ids' => $productIds,
+                'city_id' => $cityId,
+                'user_id' => $userId
+            ]);
+            
             $dynamicData = $dynamicService->getProductsDynamicData($productIds, $cityId, $userId);
             
-            // Используем DTO для единообразия
-            $result = [];
-            foreach ($dynamicData as $productId => $data) {
-                $dto = ProductAvailabilityDTO::fromDynamicData($productId, $data);
-                $result[$productId] = $dto->toArray();
-            }
+            Logger::info('Dynamic data received', ['data' => $dynamicData]);
             
-            $this->success($result);
+            // Остальной код...
             
         } catch (\Exception $e) {
             Logger::error('API Availability error', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
             ]);
             
             $this->error('Ошибка проверки наличия: ' . $e->getMessage(), 500);

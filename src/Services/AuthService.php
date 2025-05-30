@@ -2,6 +2,8 @@
 namespace App\Services;
 
 use App\Core\Database;
+use App\Core\Logger;
+use App\Services\CartService;
 
 class AuthService
 {
@@ -145,6 +147,16 @@ class AuthService
             "UPDATE users SET last_login_at = NOW(), last_login_ip = ? WHERE user_id = ?",
             [$_SESSION['ip'], $user['user_id']]
         );
+        
+        // Объединяем гостевую корзину с пользовательской
+        try {
+            CartService::mergeGuestCartWithUser($user['user_id']);
+        } catch (\Exception $e) {
+            Logger::warning('Failed to merge guest cart', [
+                'user_id' => $user['user_id'],
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 
     private static function sanitizeUserData(array $user): array

@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Хост: localhost
--- Время создания: Май 29 2025 г., 22:30
+-- Время создания: Май 30 2025 г., 14:46
 -- Версия сервера: 8.0.42-0ubuntu0.22.04.1
 -- Версия PHP: 8.1.2-1ubuntu2.21
 
@@ -168,14 +168,6 @@ CREATE TABLE `cities` (
   `cutoff_time` time DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
---
--- Дамп данных таблицы `cities`
---
-
-INSERT INTO `cities` (`city_id`, `name`, `region`, `timezone`, `delivery_base_days`, `working_days`, `cutoff_time`) VALUES
-(1, 'Москва', 'Московская область', 'Europe/Moscow', 1, '[1, 2, 3, 4, 5]', NULL),
-(3, 'Ярославль', 'Ярославская область', 'Europe/Moscow', 1, '[3]', NULL);
-
 -- --------------------------------------------------------
 
 --
@@ -277,6 +269,7 @@ CREATE TABLE `job_queue` (
   `type` varchar(50) NOT NULL,
   `payload` json NOT NULL,
   `priority` tinyint NOT NULL DEFAULT '5',
+  `available_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `status` enum('pending','processing','completed','failed') NOT NULL DEFAULT 'pending',
   `attempts` tinyint NOT NULL DEFAULT '0',
   `result` json DEFAULT NULL,
@@ -300,6 +293,20 @@ CREATE TABLE `login_attempts` (
   `last_attempt` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `locked_until` timestamp NULL DEFAULT NULL,
   `ip_address` varchar(45) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Структура таблицы `metrics`
+--
+
+CREATE TABLE `metrics` (
+  `id` bigint NOT NULL,
+  `metric_type` varchar(50) NOT NULL,
+  `data` json DEFAULT NULL,
+  `value` float NOT NULL DEFAULT '1',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
@@ -435,15 +442,6 @@ CREATE TABLE `roles` (
   `name` varchar(50) NOT NULL,
   `description` text
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
---
--- Дамп данных таблицы `roles`
---
-
-INSERT INTO `roles` (`role_id`, `name`, `description`) VALUES
-(1, 'admin', 'Administrator with full access'),
-(2, 'client', 'Registered client user'),
-(3, 'guest', 'Unregistered guest user');
 
 -- --------------------------------------------------------
 
@@ -591,13 +589,6 @@ CREATE TABLE `users` (
   `last_login_at` timestamp NULL DEFAULT NULL,
   `last_login_ip` varchar(45) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
---
--- Дамп данных таблицы `users`
---
-
-INSERT INTO `users` (`user_id`, `username`, `email`, `password_hash`, `role_id`, `is_active`, `created_at`, `updated_at`, `is_guest`, `first_name`, `last_name`, `phone`, `is_legal_entity`, `inn`, `company_name`, `city_id`, `password_reset_token`, `password_reset_expires`, `email_verified_at`, `two_factor_secret`, `two_factor_enabled`, `last_login_at`, `last_login_ip`) VALUES
-(1, 'waysen_admin', 'vde76ru@yandex.ru', '$2y$10$BQAhwxEICT6v.xKk9mlbweO820FjbumfgPQLK/zQjOTf9PXXAIeZO', 1, 1, '2025-05-02 11:52:58', '2025-05-29 21:39:21', 0, NULL, NULL, NULL, 0, NULL, NULL, 3, NULL, NULL, NULL, NULL, 0, '2025-05-29 18:39:21', '147.45.111.86');
 
 -- --------------------------------------------------------
 
@@ -805,6 +796,14 @@ ALTER TABLE `login_attempts`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_identifier` (`identifier`),
   ADD KEY `idx_last_attempt` (`last_attempt`);
+
+--
+-- Индексы таблицы `metrics`
+--
+ALTER TABLE `metrics`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_type_time` (`metric_type`,`created_at`),
+  ADD KEY `idx_created_at` (`created_at`);
 
 --
 -- Индексы таблицы `prices`
@@ -1043,7 +1042,7 @@ ALTER TABLE `categories`
 -- AUTO_INCREMENT для таблицы `cities`
 --
 ALTER TABLE `cities`
-  MODIFY `city_id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `city_id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT для таблицы `clients_organizations`
@@ -1080,6 +1079,12 @@ ALTER TABLE `job_queue`
 --
 ALTER TABLE `login_attempts`
   MODIFY `id` int NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT для таблицы `metrics`
+--
+ALTER TABLE `metrics`
+  MODIFY `id` bigint NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT для таблицы `prices`
@@ -1127,7 +1132,7 @@ ALTER TABLE `related_products`
 -- AUTO_INCREMENT для таблицы `roles`
 --
 ALTER TABLE `roles`
-  MODIFY `role_id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `role_id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT для таблицы `search_logs`
@@ -1169,7 +1174,7 @@ ALTER TABLE `supplier_mappings`
 -- AUTO_INCREMENT для таблицы `users`
 --
 ALTER TABLE `users`
-  MODIFY `user_id` int NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `user_id` int NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT для таблицы `user_profiles`
