@@ -18,6 +18,9 @@ try {
     // 1.1. Кэш
     \App\Core\Cache::init();
     
+    // 1.2. Регистрируем централизованный обработчик исключений
+    \App\Core\ExceptionHandler::register();
+    
     // 2. SecurityManager без логирования
     SecurityManager::initialize();
     
@@ -109,6 +112,9 @@ $router->get('/shop', function() {
 $router->get('/', function() {
     \App\Core\Layout::render('home/index', []);
 });
+
+// Остатки
+$router->get('/api/availability/debug', [$apiController, 'availabilityDebugAction']);
 
 // 404
 $router->set404(function() {
