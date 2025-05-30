@@ -155,29 +155,39 @@ class SpecificationController
             header('Location: /login');
             exit;
         }
+        
         $user = AuthService::user();
+        $page = max(1, (int)($_GET['page'] ?? 1));
+        $perPage = 20;
+        $offset = ($page - 1) * $perPage;
+        
         $pdo = Database::getConnection();
-        $stmt = $pdo->prepare("SELECT * FROM specifications WHERE user_id = ? ORDER BY created_at DESC");
-        $stmt->execute([$user['id']]);
+        
+        // Получаем общее количество
+        $countStmt = $pdo->prepare("SELECT COUNT(*) FROM specifications WHERE user_id = ?");
+        $countStmt->execute([$user['id']]);
+        $total = (int)$countStmt->fetchColumn();
+        
+        // Получаем спецификации с пагинацией
+        $stmt = $pdo->prepare("
+            SELECT s.*, 
+                   COUNT(si.product_id) as items_count,
+                   SUM(si.quantity * si.price) as total_amount
+            FROM specifications s
+            LEFT JOIN specification_items si ON s.specification_id = si.specification_id
+            WHERE s.user_id = ?
+            GROUP BY s.specification_id
+            ORDER BY s.created_at DESC
+            LIMIT ? OFFSET ?
+        ");
+        $stmt->execute([$user['id'], $perPage, $offset]);
         $specs = $stmt->fetchAll();
-
-        $summaries = [];
-        $itemsCount = [];
-        foreach ($specs as $spec) {
-            $sid = $spec['specification_id'];
-            $stmt2 = $pdo->prepare("SELECT SUM(quantity * price) AS total FROM specification_items WHERE specification_id = ?");
-            $stmt2->execute([$sid]);
-            $summaries[$sid] = $stmt2->fetchColumn() ?: 0;
-
-            $stmt3 = $pdo->prepare("SELECT COUNT(*) FROM specification_items WHERE specification_id = ?");
-            $stmt3->execute([$sid]);
-            $itemsCount[$sid] = (int)$stmt3->fetchColumn();
-        }
-
+    
         Layout::render('specification/index', [
             'specs' => $specs,
-            'summaries' => $summaries,
-            'itemsCount' => $itemsCount,
+            'currentPage' => $page,
+            'totalPages' => ceil($total / $perPage),
+            'total' => $total
         ]);
     }
 }

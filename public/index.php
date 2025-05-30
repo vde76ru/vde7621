@@ -30,6 +30,10 @@ try {
     // 6. Rate limiting
     \App\Middleware\RateLimitMiddleware::handle();
 
+    // 7. Проверка безопасности
+    $requestUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+    \App\Middleware\SecurityMiddleware::checkRoute($requestUri);
+
 } catch (\Exception $e) {
     error_log("Critical initialization error: " . $e->getMessage());
     http_response_code(500);

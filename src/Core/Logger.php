@@ -72,21 +72,35 @@ class Logger
 
     private static function logToDatabase(string $level, string $message, array $context): void
     {
-        if (!class_exists(Database::class)) {
+        // Предотвращаем рекурсию
+        static $inDatabaseLog = false;
+        if ($inDatabaseLog) {
             return;
         }
-
-        $extra = [
-            'user_id' => $_SESSION['user_id'] ?? null,
-            'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
-            'uri' => $_SERVER['REQUEST_URI'] ?? ''
-        ];
-
-        Database::query(
-            "INSERT INTO application_logs (level, message, context, extra, created_at) 
-             VALUES (?, ?, ?, ?, NOW())",
-            [$level, $message, json_encode($context), json_encode($extra)]
-        );
+        
+        $inDatabaseLog = true;
+        
+        try {
+            if (!class_exists(Database::class)) {
+                return;
+            }
+    
+            $extra = [
+                'user_id' => $_SESSION['user_id'] ?? null,
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
+                'uri' => $_SERVER['REQUEST_URI'] ?? ''
+            ];
+    
+            Database::query(
+                "INSERT INTO application_logs (level, message, context, extra, created_at) 
+                 VALUES (?, ?, ?, ?, NOW())",
+                [$level, $message, json_encode($context), json_encode($extra)]
+            );
+        } catch (\Exception $e) {
+            // Игнорируем ошибки логирования в БД
+        } finally {
+            $inDatabaseLog = false;
+        }
     }
 
     private static function logToFile(string $level, string $message, array $context): void

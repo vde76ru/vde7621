@@ -126,17 +126,36 @@ class CartService
     }
     
     /**
-     * Получить статистику корзины
+     * Получить корзину с полной информацией о товарах
+     * Оптимизированная версия без N+1 запросов
      */
-    public static function getStats(?int $userId = null): array
+    public static function getWithProducts(?int $userId = null): array
     {
         $cart = self::get($userId);
+        if (empty($cart)) {
+            return ['cart' => [], 'products' => []];
+        }
         
-        return [
-            'items_count' => count($cart),
-            'total_quantity' => array_sum(array_column($cart, 'quantity')),
-            'product_ids' => array_keys($cart)
-        ];
+        $productIds = array_keys($cart);
+        
+        // Один запрос для всех товаров
+        $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+        $stmt = Database::query(
+            "SELECT p.*, pr.price as base_price, b.name as brand_name, s.name as series_name
+             FROM products p
+             LEFT JOIN prices pr ON pr.product_id = p.product_id AND pr.is_base = 1
+             LEFT JOIN brands b ON p.brand_id = b.brand_id
+             LEFT JOIN series s ON p.series_id = s.series_id
+             WHERE p.product_id IN ($placeholders)",
+            $productIds
+        );
+        
+        $products = [];
+        while ($row = $stmt->fetch()) {
+            $products[$row['product_id']] = $row;
+        }
+        
+        return ['cart' => $cart, 'products' => $products];
     }
     
     /**

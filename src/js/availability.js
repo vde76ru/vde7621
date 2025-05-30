@@ -107,19 +107,18 @@ class AvailabilityService {
         Object.entries(data).forEach(([productId, info]) => {
             const row = document.querySelector(`tr[data-product-id="${productId}"]`);
             if (!row) return;
-
-            // Наличие
+    
+            // Наличие - используем единый формат
             const availCell = row.querySelector('.availability-cell, .col-availability span');
             if (availCell) {
-                const qty = info.quantity || 0;
-                availCell.textContent = qty > 0 ? `${qty} шт.` : 'Нет';
-                availCell.className = qty > 10 ? 'text-success' : qty > 0 ? 'text-warning' : 'text-danger';
+                availCell.textContent = info.availability_text || (info.quantity > 0 ? `${info.quantity} шт.` : 'Нет');
+                availCell.className = info.quantity > 10 ? 'text-success' : info.quantity > 0 ? 'text-warning' : 'text-danger';
             }
-
+    
             // Дата доставки
             const dateCell = row.querySelector('.delivery-date-cell, .col-delivery-date span');
             if (dateCell) {
-                dateCell.textContent = info.delivery_date || info.delivery_text || '—';
+                dateCell.textContent = info.delivery_text || info.delivery_date || '—';
             }
         });
     }

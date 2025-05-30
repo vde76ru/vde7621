@@ -39,36 +39,26 @@ class CartController
     public function viewAction(): void
     {
         $userId = AuthService::check() ? AuthService::user()['id'] : null;
-        $cart = CartService::get($userId);
-        $productIds = array_keys($cart);
-        $products = [];
-
-        if (!empty($productIds)) {
-            $client = \OpenSearch\ClientBuilder::create()->build();
-            $body = [
-                'size' => count($productIds),
-                'query' => ['ids' => ['values' => $productIds]],
-            ];
-            $response = $client->search(['index' => 'products_current', 'body' => $body]);
-            foreach ($response['hits']['hits'] as $hit) {
-                $products[$hit['_id']] = $hit['_source'];
-            }
-        }
-
+        $data = CartService::getWithProducts($userId);
+        
         $rows = [];
-        foreach ($cart as $pid => $item) {
+        foreach ($data['cart'] as $pid => $item) {
+            $product = $data['products'][$pid] ?? null;
+            if (!$product) continue;
+            
             $rows[] = [
                 'product_id' => $pid,
-                'name' => $products[$pid]['name'] ?? '',
+                'name' => $product['name'],
+                'external_id' => $product['external_id'],
                 'quantity' => $item['quantity'],
-                'base_price' => $products[$pid]['base_price'] ?? 0,
+                'base_price' => $product['base_price'] ?? 0,
             ];
         }
-
+    
         Layout::render('cart/view', [
             'cartRows' => $rows,
-            'cart' => $cart,
-            'products' => $products 
+            'cart' => $data['cart'],
+            'products' => $data['products']
         ]);
     }
 

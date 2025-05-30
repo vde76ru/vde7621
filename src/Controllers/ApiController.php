@@ -16,7 +16,7 @@ class ApiController extends BaseController
     public function availabilityAction(): void
     {
         try {
-            // Для GET запросов используем только $_GET
+            // Используем только $_GET для GET-запросов
             $validated = $this->validate($_GET, [
                 'city_id' => 'required|integer|min:1',
                 'product_ids' => 'required|string|max:10000'
@@ -35,9 +35,16 @@ class ApiController extends BaseController
             $dynamicService = new DynamicProductDataService();
             $userId = AuthService::check() ? AuthService::user()['id'] : null;
             
-            $data = $dynamicService->getProductsDynamicData($productIds, $cityId, $userId);
+            $dynamicData = $dynamicService->getProductsDynamicData($productIds, $cityId, $userId);
             
-            $this->success($data);
+            // Используем DTO для единообразия
+            $result = [];
+            foreach ($dynamicData as $productId => $data) {
+                $dto = ProductAvailabilityDTO::fromDynamicData($productId, $data);
+                $result[$productId] = $dto->toArray();
+            }
+            
+            $this->success($result);
             
         } catch (\Exception $e) {
             Logger::error('API Availability error', [
